@@ -1,7 +1,8 @@
 <*
  OpenXR 1.0, the part a Vulkan renderer drawing a stereo projection layer needs:
  instance, system, session, spaces, swapchains, the frame loop, views and events,
- with XR_KHR_vulkan_enable and the two Android loader extensions.
+ with XR_KHR_vulkan_enable and the two Android loader extensions, plus the
+ optional XR_FB_display_refresh_rate and XR_EXT_performance_settings.
 
  Layouts follow openxr.h field for field; test/xr_abi_test.c3 checks the sizes.
  Vulkan handles are `void*` so this library does not depend on a Vulkan binding.
@@ -33,6 +34,7 @@ const Result SESSION_NOT_FOCUSED = 8;
 const Result FRAME_DISCARDED    = 9;
 const Result ERROR_FORM_FACTOR_UNAVAILABLE = -35;
 
+const StructureType TYPE_EXTENSION_PROPERTIES                 = 2;
 const StructureType TYPE_INSTANCE_CREATE_INFO                 = 3;
 const StructureType TYPE_SYSTEM_GET_INFO                      = 4;
 const StructureType TYPE_VIEW_LOCATE_INFO                     = 6;
@@ -61,6 +63,7 @@ const StructureType TYPE_GRAPHICS_BINDING_VULKAN_KHR          = 1000025000;
 const StructureType TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR           = 1000025001;
 const StructureType TYPE_GRAPHICS_REQUIREMENTS_VULKAN_KHR     = 1000025002;
 const StructureType TYPE_LOADER_INIT_INFO_ANDROID_KHR         = 1000089000;
+const StructureType TYPE_EVENT_DATA_DISPLAY_REFRESH_RATE_CHANGED_FB = 1000101000;
 
 const CInt FORM_FACTOR_HEAD_MOUNTED_DISPLAY       = 1;
 const CInt VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO = 2;
@@ -93,6 +96,18 @@ const usz MAX_APPLICATION_NAME_SIZE = 128;
 const usz MAX_ENGINE_NAME_SIZE      = 128;
 const usz MAX_RUNTIME_NAME_SIZE     = 128;
 const usz MAX_RESULT_STRING_SIZE    = 64;
+const usz MAX_EXTENSION_NAME_SIZE   = 128;
+
+const ZString FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME = "XR_FB_display_refresh_rate";
+const ZString EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME = "XR_EXT_performance_settings";
+
+// XR_EXT_performance_settings: which processor a level is for, and the levels.
+const CInt PERF_SETTINGS_DOMAIN_CPU = 1;
+const CInt PERF_SETTINGS_DOMAIN_GPU = 2;
+const CInt PERF_SETTINGS_LEVEL_POWER_SAVINGS  = 0;
+const CInt PERF_SETTINGS_LEVEL_SUSTAINED_LOW  = 25;
+const CInt PERF_SETTINGS_LEVEL_SUSTAINED_HIGH = 50;
+const CInt PERF_SETTINGS_LEVEL_BOOST          = 75;
 
 struct Vector3f
 {
@@ -176,6 +191,22 @@ struct LoaderInitInfoAndroidKHR
 	void* next;
 	void* application_vm;
 	void* application_context;
+}
+
+struct EventDataDisplayRefreshRateChangedFB
+{
+	StructureType type;
+	void* next;
+	float from_display_refresh_rate;
+	float to_display_refresh_rate;
+}
+
+struct ExtensionProperties
+{
+	StructureType type;
+	void* next;
+	char[MAX_EXTENSION_NAME_SIZE] extension_name;
+	uint extension_version;
 }
 
 struct InstanceProperties
@@ -399,6 +430,11 @@ extern fn Result get_instance_proc_addr(Instance instance, ZString name, VoidFn*
 
 alias InitializeLoaderFn = fn Result(LoaderInitInfoAndroidKHR* info);
 alias CreateInstanceFn = fn Result(InstanceCreateInfo* info, Instance* instance);
+alias EnumerateInstanceExtensionPropertiesFn = fn Result(ZString layer, uint capacity, uint* count, ExtensionProperties* properties);
+alias EnumerateDisplayRefreshRatesFn = fn Result(Session session, uint capacity, uint* count, float* rates);
+alias GetDisplayRefreshRateFn = fn Result(Session session, float* rate);
+alias RequestDisplayRefreshRateFn = fn Result(Session session, float rate);
+alias PerfSettingsSetPerformanceLevelFn = fn Result(Session session, CInt domain, CInt level);
 alias DestroyInstanceFn = fn Result(Instance instance);
 alias GetInstancePropertiesFn = fn Result(Instance instance, InstanceProperties* properties);
 alias ResultToStringFn = fn Result(Instance instance, Result value, char* buffer);
@@ -436,6 +472,7 @@ struct Commands
 {
 	InitializeLoaderFn initialize_loader;
 	CreateInstanceFn create_instance;
+	EnumerateInstanceExtensionPropertiesFn enumerate_instance_extension_properties;
 	DestroyInstanceFn destroy_instance;
 	GetInstancePropertiesFn get_instance_properties;
 	ResultToStringFn result_to_string;
@@ -465,6 +502,11 @@ struct Commands
 	BeginFrameFn begin_frame;
 	EndFrameFn end_frame;
 	LocateViewsFn locate_views;
+	// Null unless the instance enabled their extension - see `load_extensions`.
+	EnumerateDisplayRefreshRatesFn enumerate_display_refresh_rates;
+	GetDisplayRefreshRateFn get_display_refresh_rate;
+	RequestDisplayRefreshRateFn request_display_refresh_rate;
+	PerfSettingsSetPerformanceLevelFn perf_settings_set_performance_level;
 }
 
 Commands cmd;
@@ -492,7 +534,47 @@ macro void? @load(Instance instance, #slot, ZString name) @private
 fn void? load_global()
 {
 	@load((Instance)null, cmd.create_instance, "xrCreateInstance")!;
+	@load((Instance)null, cmd.enumerate_instance_extension_properties, "xrEnumerateInstanceExtensionProperties")!;
 	(void)@load((Instance)null, cmd.initialize_loader, "xrInitializeLoaderKHR");
+}
+
+<*
+ Loads the optional extensions' commands. One the instance did not enable stays
+ null, which is how a caller tells whether it has it.
+
+ @require instance != null : "Instance must exist"
+*>
+fn void load_extensions(Instance instance, bool refresh_rate, bool performance)
+{
+	if (refresh_rate)
+	{
+		(void)@load(instance, cmd.enumerate_display_refresh_rates, "xrEnumerateDisplayRefreshRatesFB");
+		(void)@load(instance, cmd.get_display_refresh_rate, "xrGetDisplayRefreshRateFB");
+		(void)@load(instance, cmd.request_display_refresh_rate, "xrRequestDisplayRefreshRateFB");
+	}
+	if (performance)
+	{
+		(void)@load(instance, cmd.perf_settings_set_performance_level, "xrPerfSettingsSetPerformanceLevelEXT");
+	}
+}
+
+<*
+ Whether the runtime offers an instance extension, by name.
+
+ @return? CALL_FAILED
+*>
+fn bool? has_extension(ZString name) => @pool()
+{
+	uint count;
+	check(cmd.enumerate_instance_extension_properties(null, 0, &count, null), "xrEnumerateInstanceExtensionProperties")!;
+	ExtensionProperties[] all = alloc::new_array(tmem, ExtensionProperties, count);
+	foreach (&each : all) each.type = TYPE_EXTENSION_PROPERTIES;
+	check(cmd.enumerate_instance_extension_properties(null, count, &count, all.ptr), "xrEnumerateInstanceExtensionProperties")!;
+	foreach (&each : all[:count])
+	{
+		if (((ZString)&each.extension_name).str_view() == name.str_view()) return true;
+	}
+	return false;
 }
 
 <*
