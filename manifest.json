@@ -1,0 +1,15 @@
+{
+  // Hand-written bindings for the slice of OpenXR 1.0 a Vulkan renderer needs,
+  // plus the Android loader extensions. Only xrGetInstanceProcAddr is linked;
+  // the application links the loader (libopenxr_loader) itself.
+  "provides": "openxr",
+  "sources": ["xr/**"],
+  "targets": {
+    "android-aarch64": {},
+    "linux-x64": {},
+    "linux-aarch64": {},
+    "macos-x64": {},
+    "macos-aarch64": {},
+    "windows-x64": {}
+  }
+}
