@@ -83,6 +83,7 @@ const StructureType TYPE_ACTION_SET_CREATE_INFO               = 28;
 const StructureType TYPE_ACTION_CREATE_INFO                   = 29;
 const StructureType TYPE_ACTION_SPACE_CREATE_INFO             = 38;
 const StructureType TYPE_SPACE_LOCATION                       = 42;
+const StructureType TYPE_SPACE_VELOCITY                       = 43;
 const StructureType TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING = 51;
 const StructureType TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED = 52;
 const StructureType TYPE_INTERACTION_PROFILE_STATE            = 53;
@@ -131,6 +132,9 @@ const Flags64 VIEW_STATE_POSITION_VALID_BIT    = 0x02;
 
 const Flags64 SPACE_LOCATION_ORIENTATION_VALID_BIT = 0x01;
 const Flags64 SPACE_LOCATION_POSITION_VALID_BIT    = 0x02;
+
+const Flags64 SPACE_VELOCITY_LINEAR_VALID_BIT  = 0x01;
+const Flags64 SPACE_VELOCITY_ANGULAR_VALID_BIT = 0x02;
 
 const Flags64 COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT = 0x02;
 const Flags64 COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT      = 0x04;
@@ -638,6 +642,16 @@ struct SpaceLocation
 	void* next;
 	Flags64 location_flags;
 	Posef pose;
+}
+
+// Chained on a `SpaceLocation`'s `next`: how fast the space moves, in the base space.
+struct SpaceVelocity
+{
+	StructureType type;
+	void* next;
+	Flags64 velocity_flags;
+	Vector3f linear_velocity;
+	Vector3f angular_velocity;
 }
 
 struct HapticActionInfo
