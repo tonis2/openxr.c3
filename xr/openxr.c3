@@ -1,8 +1,9 @@
 <*
  OpenXR 1.0, the part a Vulkan renderer drawing a stereo projection layer needs:
  instance, system, session, spaces, swapchains, the frame loop, views and events,
- with XR_KHR_vulkan_enable and the two Android loader extensions, plus the
- optional XR_FB_display_refresh_rate and XR_EXT_performance_settings.
+ actions for controller input and haptics, with XR_KHR_vulkan_enable and the two
+ Android loader extensions, plus the optional XR_FB_display_refresh_rate,
+ XR_EXT_performance_settings and XR_FB_passthrough.
 
  Layouts follow openxr.h field for field; test/xr_abi_test.c3 checks the sizes.
  Vulkan handles are `void*` so this library does not depend on a Vulkan binding.
@@ -18,6 +19,10 @@ typedef Instance = inline void*;
 typedef Session = inline void*;
 typedef Space = inline void*;
 typedef Swapchain = inline void*;
+typedef ActionSet = inline void*;
+typedef Action = inline void*;
+typedef PassthroughFB = inline void*;
+typedef PassthroughLayerFB = inline void*;
 
 alias SystemId = ulong;
 alias Time = long;
@@ -25,6 +30,8 @@ alias Duration = long;
 alias Version = ulong;
 alias Flags64 = ulong;
 alias Bool32 = uint;
+// An interned string such as "/user/hand/left"; see `string_to_path`.
+alias Path = ulong;
 
 const Result SUCCESS            = 0;
 const Result TIMEOUT_EXPIRED    = 1;
@@ -33,6 +40,8 @@ const Result EVENT_UNAVAILABLE  = 4;
 const Result SESSION_NOT_FOCUSED = 8;
 const Result FRAME_DISCARDED    = 9;
 const Result ERROR_FORM_FACTOR_UNAVAILABLE = -35;
+const Result ERROR_PATH_UNSUPPORTED = -22;
+const Result ERROR_ACTIONSETS_ALREADY_ATTACHED = -47;
 
 const StructureType TYPE_EXTENSION_PROPERTIES                 = 2;
 const StructureType TYPE_INSTANCE_CREATE_INFO                 = 3;
@@ -64,10 +73,40 @@ const StructureType TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR           = 1000025001;
 const StructureType TYPE_GRAPHICS_REQUIREMENTS_VULKAN_KHR     = 1000025002;
 const StructureType TYPE_LOADER_INIT_INFO_ANDROID_KHR         = 1000089000;
 const StructureType TYPE_EVENT_DATA_DISPLAY_REFRESH_RATE_CHANGED_FB = 1000101000;
+const StructureType TYPE_SYSTEM_PROPERTIES                    = 5;
+const StructureType TYPE_HAPTIC_VIBRATION                     = 13;
+const StructureType TYPE_ACTION_STATE_BOOLEAN                 = 23;
+const StructureType TYPE_ACTION_STATE_FLOAT                   = 24;
+const StructureType TYPE_ACTION_STATE_VECTOR2F                = 25;
+const StructureType TYPE_ACTION_STATE_POSE                    = 27;
+const StructureType TYPE_ACTION_SET_CREATE_INFO               = 28;
+const StructureType TYPE_ACTION_CREATE_INFO                   = 29;
+const StructureType TYPE_ACTION_SPACE_CREATE_INFO             = 38;
+const StructureType TYPE_SPACE_LOCATION                       = 42;
+const StructureType TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING = 51;
+const StructureType TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED = 52;
+const StructureType TYPE_INTERACTION_PROFILE_STATE            = 53;
+const StructureType TYPE_ACTION_STATE_GET_INFO                = 58;
+const StructureType TYPE_HAPTIC_ACTION_INFO                   = 59;
+const StructureType TYPE_SESSION_ACTION_SETS_ATTACH_INFO      = 60;
+const StructureType TYPE_ACTIONS_SYNC_INFO                    = 61;
+const StructureType TYPE_PASSTHROUGH_CREATE_INFO_FB           = 1000118001;
+const StructureType TYPE_PASSTHROUGH_LAYER_CREATE_INFO_FB     = 1000118002;
+const StructureType TYPE_COMPOSITION_LAYER_PASSTHROUGH_FB     = 1000118003;
+const StructureType TYPE_SYSTEM_PASSTHROUGH_PROPERTIES2_FB    = 1000118006;
+const StructureType TYPE_EVENT_DATA_PASSTHROUGH_STATE_CHANGED_FB = 1000118030;
 
 const CInt FORM_FACTOR_HEAD_MOUNTED_DISPLAY       = 1;
 const CInt VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO = 2;
 const CInt ENVIRONMENT_BLEND_MODE_OPAQUE          = 1;
+const CInt ENVIRONMENT_BLEND_MODE_ADDITIVE        = 2;
+const CInt ENVIRONMENT_BLEND_MODE_ALPHA_BLEND     = 3;
+
+const CInt ACTION_TYPE_BOOLEAN_INPUT    = 1;
+const CInt ACTION_TYPE_FLOAT_INPUT      = 2;
+const CInt ACTION_TYPE_VECTOR2F_INPUT   = 3;
+const CInt ACTION_TYPE_POSE_INPUT       = 4;
+const CInt ACTION_TYPE_VIBRATION_OUTPUT = 100;
 
 const CInt REFERENCE_SPACE_TYPE_VIEW        = 1;
 const CInt REFERENCE_SPACE_TYPE_LOCAL       = 2;
@@ -90,16 +129,32 @@ const Flags64 SWAPCHAIN_USAGE_SAMPLED_BIT          = 0x20;
 const Flags64 VIEW_STATE_ORIENTATION_VALID_BIT = 0x01;
 const Flags64 VIEW_STATE_POSITION_VALID_BIT    = 0x02;
 
+const Flags64 SPACE_LOCATION_ORIENTATION_VALID_BIT = 0x01;
+const Flags64 SPACE_LOCATION_POSITION_VALID_BIT    = 0x02;
+
+const Flags64 COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT = 0x02;
+const Flags64 COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT      = 0x04;
+
 const Duration INFINITE_DURATION = 0x7fffffffffffffff;
+// The shortest pulse the runtime can make.
+const Duration MIN_HAPTIC_DURATION = -1;
+const Path NULL_PATH = 0;
 
 const usz MAX_APPLICATION_NAME_SIZE = 128;
 const usz MAX_ENGINE_NAME_SIZE      = 128;
 const usz MAX_RUNTIME_NAME_SIZE     = 128;
 const usz MAX_RESULT_STRING_SIZE    = 64;
 const usz MAX_EXTENSION_NAME_SIZE   = 128;
+const usz MAX_ACTION_SET_NAME_SIZE  = 64;
+const usz MAX_ACTION_NAME_SIZE      = 64;
+const usz MAX_LOCALIZED_ACTION_SET_NAME_SIZE = 128;
+const usz MAX_LOCALIZED_ACTION_NAME_SIZE     = 128;
+const usz MAX_SYSTEM_NAME_SIZE      = 256;
+const usz MAX_PATH_LENGTH           = 256;
 
 const ZString FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME = "XR_FB_display_refresh_rate";
 const ZString EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME = "XR_EXT_performance_settings";
+const ZString FB_PASSTHROUGH_EXTENSION_NAME = "XR_FB_passthrough";
 
 // XR_EXT_performance_settings: which processor a level is for, and the levels.
 const CInt PERF_SETTINGS_DOMAIN_CPU = 1;
@@ -108,6 +163,24 @@ const CInt PERF_SETTINGS_LEVEL_POWER_SAVINGS  = 0;
 const CInt PERF_SETTINGS_LEVEL_SUSTAINED_LOW  = 25;
 const CInt PERF_SETTINGS_LEVEL_SUSTAINED_HIGH = 50;
 const CInt PERF_SETTINGS_LEVEL_BOOST          = 75;
+
+// XR_FB_passthrough: what the system can do, how a passthrough starts, and why
+// one stopped.
+const Flags64 PASSTHROUGH_CAPABILITY_BIT_FB             = 0x01;
+const Flags64 PASSTHROUGH_CAPABILITY_COLOR_BIT_FB       = 0x02;
+const Flags64 PASSTHROUGH_CAPABILITY_LAYER_DEPTH_BIT_FB = 0x04;
+const Flags64 PASSTHROUGH_IS_RUNNING_AT_CREATION_BIT_FB = 0x01;
+const CInt PASSTHROUGH_LAYER_PURPOSE_RECONSTRUCTION_FB  = 0;
+const Flags64 PASSTHROUGH_STATE_CHANGED_REINIT_REQUIRED_BIT_FB        = 0x01;
+const Flags64 PASSTHROUGH_STATE_CHANGED_NON_RECOVERABLE_ERROR_BIT_FB  = 0x02;
+const Flags64 PASSTHROUGH_STATE_CHANGED_RECOVERABLE_ERROR_BIT_FB      = 0x04;
+const Flags64 PASSTHROUGH_STATE_CHANGED_RESTORED_ERROR_BIT_FB         = 0x08;
+
+struct Vector2f
+{
+	float x;
+	float y;
+}
 
 struct Vector3f
 {
@@ -424,6 +497,228 @@ struct EventDataSessionStateChanged
 	Time time;
 }
 
+struct SystemGraphicsProperties
+{
+	uint max_swapchain_image_height;
+	uint max_swapchain_image_width;
+	uint max_layer_count;
+}
+
+struct SystemTrackingProperties
+{
+	Bool32 orientation_tracking;
+	Bool32 position_tracking;
+}
+
+struct SystemProperties
+{
+	StructureType type;
+	void* next;
+	SystemId system_id;
+	uint vendor_id;
+	char[MAX_SYSTEM_NAME_SIZE] system_name;
+	SystemGraphicsProperties graphics_properties;
+	SystemTrackingProperties tracking_properties;
+}
+
+struct ActionSetCreateInfo
+{
+	StructureType type;
+	void* next;
+	char[MAX_ACTION_SET_NAME_SIZE] action_set_name;
+	char[MAX_LOCALIZED_ACTION_SET_NAME_SIZE] localized_action_set_name;
+	uint priority;
+}
+
+struct ActionCreateInfo
+{
+	StructureType type;
+	void* next;
+	char[MAX_ACTION_NAME_SIZE] action_name;
+	CInt action_type;
+	uint count_subaction_paths;
+	Path* subaction_paths;
+	char[MAX_LOCALIZED_ACTION_NAME_SIZE] localized_action_name;
+}
+
+struct ActionSuggestedBinding
+{
+	Action action;
+	Path binding;
+}
+
+struct InteractionProfileSuggestedBinding
+{
+	StructureType type;
+	void* next;
+	Path interaction_profile;
+	uint count_suggested_bindings;
+	ActionSuggestedBinding* suggested_bindings;
+}
+
+struct SessionActionSetsAttachInfo
+{
+	StructureType type;
+	void* next;
+	uint count_action_sets;
+	ActionSet* action_sets;
+}
+
+struct ActiveActionSet
+{
+	ActionSet action_set;
+	Path subaction_path;
+}
+
+struct ActionsSyncInfo
+{
+	StructureType type;
+	void* next;
+	uint count_active_action_sets;
+	ActiveActionSet* active_action_sets;
+}
+
+struct ActionStateGetInfo
+{
+	StructureType type;
+	void* next;
+	Action action;
+	Path subaction_path;
+}
+
+struct ActionStateBoolean
+{
+	StructureType type;
+	void* next;
+	Bool32 current_state;
+	Bool32 changed_since_last_sync;
+	Time last_change_time;
+	Bool32 is_active;
+}
+
+struct ActionStateFloat
+{
+	StructureType type;
+	void* next;
+	float current_state;
+	Bool32 changed_since_last_sync;
+	Time last_change_time;
+	Bool32 is_active;
+}
+
+struct ActionStateVector2f
+{
+	StructureType type;
+	void* next;
+	Vector2f current_state;
+	Bool32 changed_since_last_sync;
+	Time last_change_time;
+	Bool32 is_active;
+}
+
+struct ActionStatePose
+{
+	StructureType type;
+	void* next;
+	Bool32 is_active;
+}
+
+struct ActionSpaceCreateInfo
+{
+	StructureType type;
+	void* next;
+	Action action;
+	Path subaction_path;
+	Posef pose_in_action_space;
+}
+
+struct SpaceLocation
+{
+	StructureType type;
+	void* next;
+	Flags64 location_flags;
+	Posef pose;
+}
+
+struct HapticActionInfo
+{
+	StructureType type;
+	void* next;
+	Action action;
+	Path subaction_path;
+}
+
+// What `apply_haptic_feedback` takes; `HapticVibration` is the one kind.
+struct HapticBaseHeader
+{
+	StructureType type;
+	void* next;
+}
+
+struct HapticVibration
+{
+	StructureType type;
+	void* next;
+	Duration duration;
+	// 0 lets the runtime pick.
+	float frequency;
+	float amplitude;
+}
+
+struct InteractionProfileState
+{
+	StructureType type;
+	void* next;
+	Path interaction_profile;
+}
+
+struct EventDataInteractionProfileChanged
+{
+	StructureType type;
+	void* next;
+	Session session;
+}
+
+struct SystemPassthroughProperties2FB
+{
+	StructureType type;
+	void* next;
+	Flags64 capabilities;
+}
+
+struct PassthroughCreateInfoFB
+{
+	StructureType type;
+	void* next;
+	Flags64 flags;
+}
+
+struct PassthroughLayerCreateInfoFB
+{
+	StructureType type;
+	void* next;
+	PassthroughFB passthrough;
+	Flags64 flags;
+	CInt purpose;
+}
+
+// Starts like `CompositionLayerBaseHeader`, so it goes in the same layer list.
+struct CompositionLayerPassthroughFB
+{
+	StructureType type;
+	void* next;
+	Flags64 flags;
+	Space space;
+	PassthroughLayerFB layer_handle;
+}
+
+struct EventDataPassthroughStateChangedFB
+{
+	StructureType type;
+	void* next;
+	Flags64 flags;
+}
+
 alias VoidFn = fn void();
 
 extern fn Result get_instance_proc_addr(Instance instance, ZString name, VoidFn* function) @cname("xrGetInstanceProcAddr");
@@ -463,6 +758,30 @@ alias WaitFrameFn = fn Result(Session session, FrameWaitInfo* info, FrameState* 
 alias BeginFrameFn = fn Result(Session session, FrameBeginInfo* info);
 alias EndFrameFn = fn Result(Session session, FrameEndInfo* info);
 alias LocateViewsFn = fn Result(Session session, ViewLocateInfo* info, ViewState* state, uint capacity, uint* count, View* views);
+alias GetSystemPropertiesFn = fn Result(Instance instance, SystemId system, SystemProperties* properties);
+alias EnumerateEnvironmentBlendModesFn = fn Result(Instance instance, SystemId system, CInt view_type, uint capacity, uint* count, CInt* modes);
+alias StringToPathFn = fn Result(Instance instance, ZString text, Path* path);
+alias PathToStringFn = fn Result(Instance instance, Path path, uint capacity, uint* count, char* buffer);
+alias CreateActionSetFn = fn Result(Instance instance, ActionSetCreateInfo* info, ActionSet* set);
+alias DestroyActionSetFn = fn Result(ActionSet set);
+alias CreateActionFn = fn Result(ActionSet set, ActionCreateInfo* info, Action* action);
+alias SuggestInteractionProfileBindingsFn = fn Result(Instance instance, InteractionProfileSuggestedBinding* bindings);
+alias AttachSessionActionSetsFn = fn Result(Session session, SessionActionSetsAttachInfo* info);
+alias GetCurrentInteractionProfileFn = fn Result(Session session, Path user_path, InteractionProfileState* state);
+alias SyncActionsFn = fn Result(Session session, ActionsSyncInfo* info);
+alias GetActionStateBooleanFn = fn Result(Session session, ActionStateGetInfo* info, ActionStateBoolean* state);
+alias GetActionStateFloatFn = fn Result(Session session, ActionStateGetInfo* info, ActionStateFloat* state);
+alias GetActionStateVector2fFn = fn Result(Session session, ActionStateGetInfo* info, ActionStateVector2f* state);
+alias GetActionStatePoseFn = fn Result(Session session, ActionStateGetInfo* info, ActionStatePose* state);
+alias CreateActionSpaceFn = fn Result(Session session, ActionSpaceCreateInfo* info, Space* space);
+alias LocateSpaceFn = fn Result(Space space, Space base, Time time, SpaceLocation* location);
+alias ApplyHapticFeedbackFn = fn Result(Session session, HapticActionInfo* info, HapticBaseHeader* feedback);
+alias StopHapticFeedbackFn = fn Result(Session session, HapticActionInfo* info);
+alias CreatePassthroughFn = fn Result(Session session, PassthroughCreateInfoFB* info, PassthroughFB* passthrough);
+alias DestroyPassthroughFn = fn Result(PassthroughFB passthrough);
+alias PassthroughControlFn = fn Result(PassthroughFB passthrough);
+alias CreatePassthroughLayerFn = fn Result(Session session, PassthroughLayerCreateInfoFB* info, PassthroughLayerFB* layer);
+alias PassthroughLayerControlFn = fn Result(PassthroughLayerFB layer);
 
 <*
  Every command past xrGetInstanceProcAddr. `load_global` fills the three that
@@ -502,11 +821,38 @@ struct Commands
 	BeginFrameFn begin_frame;
 	EndFrameFn end_frame;
 	LocateViewsFn locate_views;
+	GetSystemPropertiesFn get_system_properties;
+	EnumerateEnvironmentBlendModesFn enumerate_environment_blend_modes;
+	StringToPathFn string_to_path;
+	PathToStringFn path_to_string;
+	CreateActionSetFn create_action_set;
+	DestroyActionSetFn destroy_action_set;
+	CreateActionFn create_action;
+	SuggestInteractionProfileBindingsFn suggest_interaction_profile_bindings;
+	AttachSessionActionSetsFn attach_session_action_sets;
+	GetCurrentInteractionProfileFn get_current_interaction_profile;
+	SyncActionsFn sync_actions;
+	GetActionStateBooleanFn get_action_state_boolean;
+	GetActionStateFloatFn get_action_state_float;
+	GetActionStateVector2fFn get_action_state_vector2f;
+	GetActionStatePoseFn get_action_state_pose;
+	CreateActionSpaceFn create_action_space;
+	LocateSpaceFn locate_space;
+	ApplyHapticFeedbackFn apply_haptic_feedback;
+	StopHapticFeedbackFn stop_haptic_feedback;
 	// Null unless the instance enabled their extension - see `load_extensions`.
 	EnumerateDisplayRefreshRatesFn enumerate_display_refresh_rates;
 	GetDisplayRefreshRateFn get_display_refresh_rate;
 	RequestDisplayRefreshRateFn request_display_refresh_rate;
 	PerfSettingsSetPerformanceLevelFn perf_settings_set_performance_level;
+	CreatePassthroughFn create_passthrough_fb;
+	DestroyPassthroughFn destroy_passthrough_fb;
+	PassthroughControlFn passthrough_start_fb;
+	PassthroughControlFn passthrough_pause_fb;
+	CreatePassthroughLayerFn create_passthrough_layer_fb;
+	PassthroughLayerControlFn destroy_passthrough_layer_fb;
+	PassthroughLayerControlFn passthrough_layer_pause_fb;
+	PassthroughLayerControlFn passthrough_layer_resume_fb;
 }
 
 Commands cmd;
@@ -544,7 +890,7 @@ fn void? load_global()
 
  @require instance != null : "Instance must exist"
 *>
-fn void load_extensions(Instance instance, bool refresh_rate, bool performance)
+fn void load_extensions(Instance instance, bool refresh_rate, bool performance, bool passthrough = false)
 {
 	if (refresh_rate)
 	{
@@ -555,6 +901,17 @@ fn void load_extensions(Instance instance, bool refresh_rate, bool performance)
 	if (performance)
 	{
 		(void)@load(instance, cmd.perf_settings_set_performance_level, "xrPerfSettingsSetPerformanceLevelEXT");
+	}
+	if (passthrough)
+	{
+		(void)@load(instance, cmd.create_passthrough_fb, "xrCreatePassthroughFB");
+		(void)@load(instance, cmd.destroy_passthrough_fb, "xrDestroyPassthroughFB");
+		(void)@load(instance, cmd.passthrough_start_fb, "xrPassthroughStartFB");
+		(void)@load(instance, cmd.passthrough_pause_fb, "xrPassthroughPauseFB");
+		(void)@load(instance, cmd.create_passthrough_layer_fb, "xrCreatePassthroughLayerFB");
+		(void)@load(instance, cmd.destroy_passthrough_layer_fb, "xrDestroyPassthroughLayerFB");
+		(void)@load(instance, cmd.passthrough_layer_pause_fb, "xrPassthroughLayerPauseFB");
+		(void)@load(instance, cmd.passthrough_layer_resume_fb, "xrPassthroughLayerResumeFB");
 	}
 }
 
@@ -614,6 +971,25 @@ fn void? load_instance(Instance instance)
 	@load(instance, cmd.begin_frame, "xrBeginFrame")!;
 	@load(instance, cmd.end_frame, "xrEndFrame")!;
 	@load(instance, cmd.locate_views, "xrLocateViews")!;
+	@load(instance, cmd.get_system_properties, "xrGetSystemProperties")!;
+	@load(instance, cmd.enumerate_environment_blend_modes, "xrEnumerateEnvironmentBlendModes")!;
+	@load(instance, cmd.string_to_path, "xrStringToPath")!;
+	@load(instance, cmd.path_to_string, "xrPathToString")!;
+	@load(instance, cmd.create_action_set, "xrCreateActionSet")!;
+	@load(instance, cmd.destroy_action_set, "xrDestroyActionSet")!;
+	@load(instance, cmd.create_action, "xrCreateAction")!;
+	@load(instance, cmd.suggest_interaction_profile_bindings, "xrSuggestInteractionProfileBindings")!;
+	@load(instance, cmd.attach_session_action_sets, "xrAttachSessionActionSets")!;
+	@load(instance, cmd.get_current_interaction_profile, "xrGetCurrentInteractionProfile")!;
+	@load(instance, cmd.sync_actions, "xrSyncActions")!;
+	@load(instance, cmd.get_action_state_boolean, "xrGetActionStateBoolean")!;
+	@load(instance, cmd.get_action_state_float, "xrGetActionStateFloat")!;
+	@load(instance, cmd.get_action_state_vector2f, "xrGetActionStateVector2f")!;
+	@load(instance, cmd.get_action_state_pose, "xrGetActionStatePose")!;
+	@load(instance, cmd.create_action_space, "xrCreateActionSpace")!;
+	@load(instance, cmd.locate_space, "xrLocateSpace")!;
+	@load(instance, cmd.apply_haptic_feedback, "xrApplyHapticFeedback")!;
+	@load(instance, cmd.stop_haptic_feedback, "xrStopHapticFeedback")!;
 }
 
 // The instance `check` names results through, once there is one.
