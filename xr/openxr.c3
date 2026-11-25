@@ -96,6 +96,7 @@ const StructureType TYPE_PASSTHROUGH_LAYER_CREATE_INFO_FB     = 1000118002;
 const StructureType TYPE_COMPOSITION_LAYER_PASSTHROUGH_FB     = 1000118003;
 const StructureType TYPE_SYSTEM_PASSTHROUGH_PROPERTIES2_FB    = 1000118006;
 const StructureType TYPE_EVENT_DATA_PASSTHROUGH_STATE_CHANGED_FB = 1000118030;
+const StructureType TYPE_COMPOSITION_LAYER_SETTINGS_FB        = 1000204000;
 
 const CInt FORM_FACTOR_HEAD_MOUNTED_DISPLAY       = 1;
 const CInt VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO = 2;
@@ -159,6 +160,8 @@ const usz MAX_PATH_LENGTH           = 256;
 const ZString FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME = "XR_FB_display_refresh_rate";
 const ZString EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME = "XR_EXT_performance_settings";
 const ZString FB_PASSTHROUGH_EXTENSION_NAME = "XR_FB_passthrough";
+const ZString FB_COMPOSITION_LAYER_SETTINGS_EXTENSION_NAME = "XR_FB_composition_layer_settings";
+const ZString META_AUTOMATIC_LAYER_FILTER_EXTENSION_NAME = "XR_META_automatic_layer_filter";
 
 // XR_EXT_performance_settings: which processor a level is for, and the levels.
 const CInt PERF_SETTINGS_DOMAIN_CPU = 1;
@@ -179,6 +182,21 @@ const Flags64 PASSTHROUGH_STATE_CHANGED_REINIT_REQUIRED_BIT_FB        = 0x01;
 const Flags64 PASSTHROUGH_STATE_CHANGED_NON_RECOVERABLE_ERROR_BIT_FB  = 0x02;
 const Flags64 PASSTHROUGH_STATE_CHANGED_RECOVERABLE_ERROR_BIT_FB      = 0x04;
 const Flags64 PASSTHROUGH_STATE_CHANGED_RESTORED_ERROR_BIT_FB         = 0x08;
+
+<*
+ XR_FB_composition_layer_settings: how the compositor filters a layer as it
+ samples it. Quality sharpening is Meta Quest Super Resolution, an upscale and
+ sharpen in one pass. AUTO_LAYER_FILTER (XR_META_automatic_layer_filter) lets
+ the runtime drop the filter where it wouldn't help. All are suggestions.
+*>
+constset CompositionLayerSettingsFlagsFB : inline Flags64
+{
+	NORMAL_SUPER_SAMPLING  = 0x01,
+	QUALITY_SUPER_SAMPLING = 0x02,
+	NORMAL_SHARPENING      = 0x04,
+	QUALITY_SHARPENING     = 0x08,
+	AUTO_LAYER_FILTER      = 0x20,
+}
 
 struct Vector2f
 {
@@ -714,6 +732,14 @@ struct PassthroughLayerCreateInfoFB
 	PassthroughFB passthrough;
 	Flags64 flags;
 	CInt purpose;
+}
+
+// Chained on a layer's `next`.
+struct CompositionLayerSettingsFB
+{
+	StructureType type;
+	void* next;
+	CompositionLayerSettingsFlagsFB layer_flags;
 }
 
 // Starts like `CompositionLayerBaseHeader`, so it goes in the same layer list.

@@ -12,6 +12,8 @@ used by [three.c3](https://github.com/tonis2/three.c3) to run on Meta Quest 3.
 - **`XR_KHR_vulkan_enable`:** the instance and device extensions the runtime wants, its physical
   device, its version range, and the Vulkan swapchain images.
 - **`XR_KHR_loader_init_android`** and **`XR_KHR_android_create_instance`**.
+- **`XR_FB_composition_layer_settings`** and **`XR_META_automatic_layer_filter`:** how the
+  compositor filters a layer, including Meta Quest Super Resolution.
 
 Actions and input are not covered yet.
 
