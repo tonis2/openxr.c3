@@ -97,6 +97,8 @@ const StructureType TYPE_COMPOSITION_LAYER_PASSTHROUGH_FB     = 1000118003;
 const StructureType TYPE_SYSTEM_PASSTHROUGH_PROPERTIES2_FB    = 1000118006;
 const StructureType TYPE_EVENT_DATA_PASSTHROUGH_STATE_CHANGED_FB = 1000118030;
 const StructureType TYPE_COMPOSITION_LAYER_SETTINGS_FB        = 1000204000;
+const StructureType TYPE_RECOMMENDED_LAYER_RESOLUTION_META    = 1000254000;
+const StructureType TYPE_RECOMMENDED_LAYER_RESOLUTION_GET_INFO_META = 1000254001;
 
 const CInt FORM_FACTOR_HEAD_MOUNTED_DISPLAY       = 1;
 const CInt VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO = 2;
@@ -162,6 +164,7 @@ const ZString EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME = "XR_EXT_performance_sett
 const ZString FB_PASSTHROUGH_EXTENSION_NAME = "XR_FB_passthrough";
 const ZString FB_COMPOSITION_LAYER_SETTINGS_EXTENSION_NAME = "XR_FB_composition_layer_settings";
 const ZString META_AUTOMATIC_LAYER_FILTER_EXTENSION_NAME = "XR_META_automatic_layer_filter";
+const ZString EXT_RECOMMENDED_LAYER_RESOLUTION_META = "XR_META_recommended_layer_resolution";
 
 // XR_EXT_performance_settings: which processor a level is for, and the levels.
 const CInt PERF_SETTINGS_DOMAIN_CPU = 1;
@@ -759,6 +762,23 @@ struct EventDataPassthroughStateChangedFB
 	Flags64 flags;
 }
 
+// XR_META_recommended_layer_resolution: runtime-recommended dimensions for a layer.
+struct RecommendedLayerResolutionMETA
+{
+	StructureType type;
+	void* next;
+	Extent2Di recommended_image_dimensions;
+	Bool32 is_valid;
+}
+
+struct RecommendedLayerResolutionGetInfoMETA
+{
+	StructureType type;
+	void* next;
+	CompositionLayerBaseHeader* layer;
+	Time predicted_display_time;
+}
+
 alias VoidFn = fn void();
 alias GetInstanceProcAddrFn = fn Result(Instance instance, ZString name, VoidFn* function);
 
@@ -831,6 +851,7 @@ alias DestroyPassthroughFn = fn Result(PassthroughFB passthrough);
 alias PassthroughControlFn = fn Result(PassthroughFB passthrough);
 alias CreatePassthroughLayerFn = fn Result(Session session, PassthroughLayerCreateInfoFB* info, PassthroughLayerFB* layer);
 alias PassthroughLayerControlFn = fn Result(PassthroughLayerFB layer);
+alias GetRecommendedLayerResolutionFn = fn Result(Session session, RecommendedLayerResolutionGetInfoMETA* info, RecommendedLayerResolutionMETA* resolution);
 
 <*
  Every command past xrGetInstanceProcAddr. `load_global` fills the three that
@@ -902,6 +923,7 @@ struct Commands
 	PassthroughLayerControlFn destroy_passthrough_layer_fb;
 	PassthroughLayerControlFn passthrough_layer_pause_fb;
 	PassthroughLayerControlFn passthrough_layer_resume_fb;
+	GetRecommendedLayerResolutionFn get_recommended_layer_resolution_meta;
 }
 
 Commands cmd;
@@ -981,7 +1003,8 @@ fn void? load_global()
 
  @require instance != null : "Instance must exist"
 *>
-fn void load_extensions(Instance instance, bool refresh_rate, bool performance, bool passthrough = false)
+fn void load_extensions(Instance instance, bool refresh_rate, bool performance, bool passthrough = false,
+	bool recommended_resolution = false)
 {
 	if (refresh_rate)
 	{
@@ -1003,6 +1026,10 @@ fn void load_extensions(Instance instance, bool refresh_rate, bool performance, 
 		(void)@load(instance, cmd.destroy_passthrough_layer_fb, "xrDestroyPassthroughLayerFB");
 		(void)@load(instance, cmd.passthrough_layer_pause_fb, "xrPassthroughLayerPauseFB");
 		(void)@load(instance, cmd.passthrough_layer_resume_fb, "xrPassthroughLayerResumeFB");
+	}
+	if (recommended_resolution)
+	{
+		(void)@load(instance, cmd.get_recommended_layer_resolution_meta, "xrGetRecommendedLayerResolutionMETA");
 	}
 }
 
