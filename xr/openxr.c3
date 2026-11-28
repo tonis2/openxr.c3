@@ -760,8 +760,17 @@ struct EventDataPassthroughStateChangedFB
 }
 
 alias VoidFn = fn void();
+alias GetInstanceProcAddrFn = fn Result(Instance instance, ZString name, VoidFn* function);
 
-extern fn Result get_instance_proc_addr(Instance instance, ZString name, VoidFn* function) @cname("xrGetInstanceProcAddr");
+extern fn void* xr_load_library(char* name) @cname("LoadLibraryA") @private @feat(WIN32);
+extern fn void* xr_get_proc_address(void* handle, char* name) @cname("GetProcAddress") @private @feat(WIN32);
+extern fn void* xr_dlopen(char* filename, CInt flags) @cname("dlopen") @private @feat(!WIN32);
+extern fn void* xr_dlsym(void* handle, char* symbol) @cname("dlsym") @private @feat(!WIN32);
+
+const CInt XR_RTLD_LAZY @private = 1;
+
+void* loader_handle @private;
+GetInstanceProcAddrFn get_instance_proc_addr;
 
 alias InitializeLoaderFn = fn Result(LoaderInitInfoAndroidKHR* info);
 alias CreateInstanceFn = fn Result(InstanceCreateInfo* info, Instance* instance);
@@ -897,7 +906,48 @@ struct Commands
 
 Commands cmd;
 
-excuse COMMAND_MISSING, CALL_FAILED;
+excuse LOADER_MISSING, COMMAND_MISSING, CALL_FAILED;
+
+<*
+ Opens the OpenXR loader shared library at runtime and resolves `xrGetInstanceProcAddr`.
+ Idempotent once loaded, so desktop binaries need no link-time `-lopenxr_loader`.
+
+ @return? LOADER_MISSING, COMMAND_MISSING
+*>
+fn void? open_loader()
+{
+	if (get_instance_proc_addr != null) return;
+
+	void* lib = null;
+	$if env::WIN32:
+		lib = xr_load_library("openxr_loader.dll");
+		if (lib == null) return LOADER_MISSING~;
+		void* sym = xr_get_proc_address(lib, "xrGetInstanceProcAddr");
+		if (sym == null) return COMMAND_MISSING~;
+		loader_handle = lib;
+		get_instance_proc_addr = (GetInstanceProcAddrFn)sym;
+	$else
+		$if env::ANDROID:
+			String[] candidates = { "libopenxr_loader.so" };
+		$else
+			$if env::DARWIN:
+				String[] candidates = { "libopenxr_loader.1.dylib", "libopenxr_loader.dylib" };
+			$else
+				String[] candidates = { "libopenxr_loader.so.1", "libopenxr_loader.so" };
+			$endif
+		$endif
+		foreach (name : candidates)
+		{
+			lib = xr_dlopen(name.ptr, XR_RTLD_LAZY);
+			if (lib != null) break;
+		}
+		if (lib == null) return LOADER_MISSING~;
+		void* sym = xr_dlsym(lib, "xrGetInstanceProcAddr");
+		if (sym == null) return COMMAND_MISSING~;
+		loader_handle = lib;
+		get_instance_proc_addr = (GetInstanceProcAddrFn)sym;
+	$endif
+}
 
 macro void? @load(Instance instance, #slot, ZString name) @private
 {
@@ -915,10 +965,11 @@ macro void? @load(Instance instance, #slot, ZString name) @private
  Loads the commands callable before an instance exists.
  `xrInitializeLoaderKHR` is only required on Android, so it may stay null elsewhere.
 
- @return? COMMAND_MISSING
+ @return? LOADER_MISSING, COMMAND_MISSING
 *>
 fn void? load_global()
 {
+	open_loader()!;
 	@load((Instance)null, cmd.create_instance, "xrCreateInstance")!;
 	@load((Instance)null, cmd.enumerate_instance_extension_properties, "xrEnumerateInstanceExtensionProperties")!;
 	(void)@load((Instance)null, cmd.initialize_loader, "xrInitializeLoaderKHR");
